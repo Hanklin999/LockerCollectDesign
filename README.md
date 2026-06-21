@@ -1,5 +1,6 @@
-# 📦 Causal Inference in Last-Mile Logistics
-### Do Push Notifications Actually Change When People Pick Up Their Parcels?
+# 📦 How Many Notifications Should We Send?
+
+### A Product Analytics Case Study on Notification Strategy and Parcel Pickup Behavior
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22C55E?style=flat)](LICENSE)
@@ -8,222 +9,208 @@
 
 ---
 
-## Overview
+## TL;DR
 
-This project applies a full causal inference pipeline to evaluate the impact of **push notification strategies** on parcel pickup efficiency across 2,000 smart locker locations.
+**Problem**: Locker congestion at high-inventory stores reduces network throughput and increases return-to-sender rates.
 
-The core question is deceptively simple:
+**Question**: How many pickup-reminder notifications should we send, and to which stores?
 
-> *Stores with more notification touches show faster pickup times — but is that because the notifications work, or because those stores were already different to begin with?*
+**Finding**: Increasing notification touches from 2 to 3 reduces parcel collection time by **1.2–1.7 hours**, validated by two independent causal methods. A 4th and 5th touch add only **0.2–0.6 additional hours** — diminishing returns.
 
-This project answers that question rigorously using four complementary methods: **Difference-in-Differences**, **Propensity Score Matching**, **Heterogeneous Treatment Effects**, and **Sensitivity Analysis**.
+**Recommendation**: Roll out the 3-touch strategy network-wide, prioritizing non-metro and high-capacity stores where the effect is largest.
+
+**Impact**: At 800K parcels/day, this reduces return-to-sender volume by an estimated **2,880 parcels/day** and frees locker capacity faster, improving throughput without added headcount.
 
 ---
 
-## Background
+## The Business Problem
 
-Smart locker networks face a critical operational tension: parcels left uncollected tie up locker capacity, reduce throughput, and increase Return-to-Sender (RTS) rates. Push notifications are the primary lever to drive timely pickup — but designing the right notification strategy requires understanding *causal* effects, not just correlations.
+Smart locker networks have a fixed asset: locker slots. When buyers don't collect parcels promptly, slots stay occupied, new parcels can't be processed, and stores hit capacity ("burst") — triggering order pauses and operational firefighting.
 
-This project simulates a nationwide experiment modelled on real operational constraints:
+Push notifications are the cheapest lever available to drive faster pickup. But more notifications also mean more cost and a real risk of notification fatigue (complaints, opt-outs). The team needed a number: **what's the right number of touches?**
 
-- **2,000 smart locker stores** across Taiwan
-- **800,000+ parcels per day** at peak
-- **5-day pickup deadline** for high-inventory (burst) stores
-- **Three notification cadences** tested simultaneously
+---
 
-**Data**: Calibrated simulation. Parameters (collection hours, RTS rates, treatment effect sizes, store inventory distributions) are grounded in real operational observations. Raw company data is not used for confidentiality reasons.
+## Product Metrics Framework
+
+| Tier | Metric | Why it matters |
+|------|--------|-----------------|
+| **North Star** | `collection_hrs` — hours from parcel arrival to pickup | Directly drives locker turnover and capacity availability |
+| **Secondary** | `rts_rate` — % of parcels returned to sender | Captures the tail-risk failure mode of slow pickup |
+| **Guardrail** | `complaint_rate` | Detects notification fatigue |
+| **Guardrail** | `opt_out_rate` | Detects long-term channel erosion |
+
+A strategy is only "good" if it moves the North Star **without** breaching the guardrails.
 
 ---
 
 ## Experiment Design
 
+**Unit of randomization**: Store (not buyer) — notifications are configured at the store/locker level, so store-level randomization avoids cross-contamination between buyers at the same location.
+
 ```
-1,000 burst stores (high inventory) → randomly assigned to:
+1,000 burst stores (high inventory, >5% order-closure hours)
+  → randomly split into:
 
-  ┌─────────────────────────────────────────────────────────┐
-  │  5D Control  │  D0 + D4          │  2 touches │ n=100  │
-  │  5D G2       │  D0 + D2 + D4     │  3 touches │ n=100  │
-  │  5D G4       │  D0–D4 (all)      │  5 touches │ n=100  │
-  │  6D          │  D0 + D5          │  2 touches │ n=700  │
-  └─────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────┐
+  │  Control │ 5-day deadline │ D0, D4          │ 2 touches │ n=100 │
+  │  G2      │ 5-day deadline │ D0, D2, D4      │ 3 touches │ n=100 │
+  │  G4      │ 5-day deadline │ D0–D4 (daily)   │ 5 touches │ n=100 │
+  │  6D      │ 6-day deadline │ D0, D5          │ 2 touches │ n=700 │
+  └──────────────────────────────────────────────────────────┘
 
-1,000 vacant stores (low inventory) → 7D, D0 + D6, 2 touches
+1,000 vacant stores (low inventory)
+  → 7D: 7-day deadline, D0/D6, 2 touches (pilot-only comparison arm)
 
-Timeline:  BM week (2026-01-19) → 4 experiment weeks
-           CNY week (2026-02-09) excluded: seasonal confound
+Timeline: 1 baseline week + 4 experiment weeks
+Excluded: Chinese New Year eve week (seasonal pickup-speed confound)
 ```
 
-**Primary outcome**: `collection_hrs` — hours from parcel arrival to pickup  
-**Secondary outcome**: `rts_rate` — proportion of parcels returned to sender  
-**Guardrail metrics**: `complaint_rate`, `opt_out_rate`
+Pilot sizing (100/100/100 vs 700/1000) reflects a real-world constraint: full network rollout wasn't feasible up front, so the team ran a smaller controlled pilot on the 5-day groups before scaling the deadline-only change to more stores. This pilot-then-scale pattern is a common compromise in operational experimentation.
 
 ---
 
-## Methods
+## Decision Memo: Which Cadence Should We Ship?
 
-| Notebook | Method | Research Question | Key Output |
-|----------|--------|-------------------|------------|
-| `00` | EDA + DAG | What does the data look like? What are the confounders? | Causal DAG, covariate distributions |
-| `01` | Data Preparation | How is the simulation calibrated? | `store_panel.csv`, `store_metadata.csv` |
-| `02` | Difference-in-Differences | Did the policy change *cause* faster pickup, controlling for time trends? | DiD coefficient, event study plot |
-| `03` | Propensity Score Matching | After balancing store characteristics, what is the treatment effect? | ATT, Love plot, PS overlap |
-| `04` | Heterogeneous Treatment Effects | Which stores benefit most? | CATE by subgroup, feature importance |
-| `05` | Sensitivity Analysis | How robust is the result to hidden confounding? | Rosenbaum Γ, placebo tests, LOO |
+| Option | Collection Time Impact | Cost | Recommendation |
+|--------|------------------------|------|-----------------|
+| **A — Keep 2 touches** | Baseline (33.7h) | Lowest | ❌ Leaves easy gains on the table |
+| **B — 3 touches (G2)** | **−1.2 to −1.5h** (DiD / PSM) | +1 notification/parcel | ✅ **Ship this** |
+| **C — 5 touches (G4)** | −1.8 to −1.9h | +3 notifications/parcel | ❌ Marginal gain (+0.3–0.6h over B) doesn't justify 3x the notification cost or opt-out risk |
+
+**Decision: Ship Option B (3-touch cadence) network-wide.**
+
+The 4th and 5th touches in Option C are not statistically distinguishable from Option B's *marginal* contribution once cost and guardrail risk are weighed — classic diminishing returns.
 
 ---
 
-## Key Findings
+## Where Should We Roll Out First?
 
-### 1. Notification cadence reduces collection time — but with diminishing returns
+Heterogeneity analysis (4 independent estimators — T/S/X-Learner, Causal Forest DML) shows the effect is **not uniform** across stores. Rolling out everywhere at once is fine here (95% of stores benefit), but if rollout needs to be staged, prioritize by these findings:
 
-| Strategy | Avg Collection Hours | vs Control | Significant |
-|----------|---------------------|------------|-------------|
-| Control (2 touches) | 33.5h | — | — |
-| G2 (3 touches) | ~32.0h | **−1.5h** | ✅ p < 0.05 |
-| G4 (5 touches) | ~31.8h | **−1.7h** | ✅ p < 0.05 |
-| G4 − G2 (marginal) | — | **−0.2h** | ❌ Not significant |
+| Segment | Effect Size | Take First? |
+|---------|-------------|-------------|
+| **Non-metro stores** | **−2.4h** | ✅ Yes — largest effect |
+| Metro stores | −1.7h | Standard priority |
+| Low-utilization stores | −2.1h | ✅ Yes |
+| High-utilization stores | −1.6h | Standard priority |
 
-**Implication**: 3 touches captures most of the benefit. The 4th and 5th notification contribute negligible additional reduction at non-trivial cost and opt-out risk.
+**Counter-intuitive finding**: notification reminders work *better* in non-metro stores, not metro ones. Buyers there appear to have weaker baseline pickup habits, so a nudge moves the needle more. Geographic location explains almost none of the variation (feature importance: 0.003); **store capacity** is the dominant driver (feature importance: 1.33, 5x the next variable) — bigger stores, where pickup delay is more costly operationally, also see larger behavioral response to reminders.
 
-### 2. PSM confirms the DiD result
+**95% of stores (285/300)** show a meaningful individual effect (CATE < −0.5h), so a full rollout is justified without complex targeting logic. If budget is constrained, non-metro and high-capacity stores offer the best marginal ROI.
 
-After matching stores on utilization rate, daily volume, capacity, and metro status, the ATT is consistent with the DiD estimate. This rules out simple selection bias as an explanation.
+---
 
-### 3. Treatment effects are heterogeneous
+## Why We Can't Just Compare Group Averages
 
-High-traffic metro stores show larger effects than low-traffic regional stores. This supports a targeted rollout strategy: upgrade notification cadence for burst metro stores first.
+A naive comparison (3-touch stores vs. 2-touch stores) shows a **−1.75h gap**. But stores weren't randomly given a notification policy in a vacuum — store characteristics (inventory pressure, traffic, capacity) co-determine both the policy a store receives *and* its baseline pickup speed. Comparing raw averages would conflate "the notification worked" with "this store was always going to collect faster."
 
-### 4. Results are robust to hidden confounding
+We address this with two independent causal designs that should agree if the effect is real:
 
-Rosenbaum sensitivity bounds show the result holds against hidden confounders up to **Γ ≈ 1.8** — a confounder would need to make treated stores 1.8× more likely to be selected before it could explain away the finding.
+**1. Difference-in-Differences** — removes store-level and time-level confounds by comparing the *change* in collection time for treated vs. control stores, before vs. after the policy change.
+
+**2. Propensity Score Matching** — pairs each treated store with a statistically similar control store (matched on utilization rate, volume, capacity, metro status) before comparing outcomes.
+
+| Method | Estimated Effect | 95% CI |
+|--------|-------------------|--------|
+| DiD (two-way fixed effects) | **−1.505h** | [−1.97, −1.04] |
+| PSM (ATT, matched) | **−1.654h** | [−1.88, −1.43] |
+| **Agreement** | within 9% of each other | — |
+
+Two methods built on different assumptions land within 9% of each other — strong evidence the effect is real, not an artifact of store selection.
+
+---
+
+## Is This Result Trustworthy? (Sensitivity Checks)
+
+| Check | Question Asked | Result |
+|-------|------------------|--------|
+| **Permutation test** | Could random chance produce this result? | 500 random reshuffles never came close (p < 0.001) |
+| **Rosenbaum bounds** | How strong would an unmeasured confounder need to be to overturn this? | Holds up to **Γ ≥ 3.0** — far beyond the conventional Γ > 1.5 robustness bar |
+| **Leave-one-week-out** | Is one unusual week driving the whole result? | Estimate varies by at most 0.1h when any single week is dropped |
+| **Covariate stability** | Does adding more controls change the answer? | 0% change from simplest to fullest model specification |
+| **Placebo outcomes** | Does the "effect" show up where it shouldn't? | Small mechanical increase in complaint/opt-out rate (expected — more touches = more messages), no evidence of broader confounding |
+
+**Bottom line**: this is one of the more robust findings you'll see in an applied experiment — it survives every standard stress test.
+
+---
+
+## Business Impact Translation
+
+| Statistical Result | Operational Translation |
+|----------------------|---------------------------|
+| −1.5h average collection time | Faster slot turnover → more locker capacity available per day without new hardware |
+| −0.36pp RTS rate | ≈ **2,880 fewer returned parcels/day** at 800K parcels/day volume |
+| Diminishing returns beyond 3 touches | Avoids ~40% extra notification spend (5 vs 3 touches) for <0.3h of additional benefit |
+| 95% of stores benefit | No targeting infrastructure needed — simple network-wide rollout |
+
+---
+
+## Methods Reference
+
+| Notebook | Method | Used To Answer |
+|----------|--------|-----------------|
+| `00` | EDA + Causal DAG | What confounds the naive comparison? |
+| `01` | Data Preparation | How is the simulation calibrated to real ops data? |
+| `02` | Difference-in-Differences | Did the policy *cause* faster pickup? |
+| `03` | Propensity Score Matching | Does the result hold after balancing store characteristics? |
+| `04` | Heterogeneous Treatment Effects | Where should we prioritize rollout? |
+| `05` | Sensitivity Analysis | How much do we trust this? |
+
+Full statistical detail, tables, and method documentation: see [**RESULTS.md**](RESULTS.md) (English) and [**RESULTS_zh.md**](RESULTS_zh.md) (繁體中文).
+
+---
+
+## Data Note
+
+Real locker-network data is confidential. This project uses a **calibrated simulation**: every parameter (baseline collection time, effect sizes, store volume distribution, seasonal patterns) is set to match values actually observed in a real nationwide notification experiment. The full data-generating process is documented and auditable in `src/data_generation.py` and `notebooks/01_Data_Preparation.ipynb`.
 
 ---
 
 ## Repository Structure
 
 ```
-causal-inference-locker-notifications/
+LockerCollectDesign/
 │
-├── data/
-│   ├── processed/
-│   │   ├── store_metadata.csv        # Static store characteristics
-│   │   ├── store_panel.csv           # Weekly panel (store × week)
-│   │   └── store_panel_highrisk.csv  # >96hr uncollected parcel cohort
-│   └── README.md                     # Data dictionary
-│
-├── notebooks/
-│   ├── 00_EDA_and_DAG.ipynb
-│   ├── 01_Data_Preparation.ipynb
-│   ├── 02_DiD.ipynb
-│   ├── 03_PSM.ipynb
-│   ├── 04_HTE.ipynb
-│   └── 05_Sensitivity_Analysis.ipynb
-│
-├── src/
-│   ├── data_generation.py    # Calibrated DGP
-│   ├── did.py                # DiD estimators
-│   ├── psm.py                # PSM pipeline
-│   ├── hte.py                # Meta-learners + Causal Forest DML
-│   ├── sensitivity.py        # Rosenbaum bounds, placebo tests, LOO
-│   └── visualization.py      # All plot functions (unified style)
-│
-├── outputs/
-│   └── figures/              # All saved plots
-│
-├── requirements.txt
-└── README.md
+├── data/processed/          # Simulated store metadata + weekly panel
+├── notebooks/                # 00–05, run in order
+├── src/                       # Reusable estimator + plotting modules
+├── outputs/figures/          # All 19 generated plots
+├── README.md                 # You are here
+├── RESULTS.md                 # Full technical writeup (English)
+├── RESULTS_zh.md              # Full technical writeup (繁體中文)
+└── requirements.txt
 ```
-
----
-
-## Visualizations
-
-| Plot | Method | What it shows |
-|------|--------|---------------|
-| Causal DAG | EDA | Confounders, treatment path, hidden bias risk |
-| Collection hours trend | EDA | Weekly outcome by group, BM baseline |
-| Parallel trends | DiD | Pre-treatment trend validation |
-| Event study | DiD | Dynamic treatment effect trajectory |
-| Coefficient stability | DiD | Result across 5 specifications |
-| PS overlap | PSM | Common support before/after matching |
-| Love plot | PSM | SMD balance before/after matching |
-| ATT estimates | PSM | Point estimate + CI across comparisons |
-| CATE distribution | HTE | Heterogeneity across meta-learners |
-| Subgroup waterfall | HTE | Treatment effect by store type/location |
-| Feature importance | HTE | What drives heterogeneity |
-| Rosenbaum bounds | Sensitivity | Hidden confounding threshold |
-| LOO robustness | Sensitivity | Week-by-week influence |
-| Placebo comparison | Sensitivity | True vs placebo outcome effects |
 
 ---
 
 ## Setup
 
 ```bash
-git clone https://github.com/yourusername/causal-inference-locker-notifications
-cd causal-inference-locker-notifications
-
+git clone https://github.com/Hanklin999/LockerCollectDesign
+cd LockerCollectDesign
 pip install -r requirements.txt
 
-# Generate simulated data
-python src/data_generation.py
-
-# Run notebooks in order
-jupyter notebook notebooks/
-```
-
-**requirements.txt**
-```
-numpy>=1.24
-pandas>=2.0
-scikit-learn>=1.3
-statsmodels>=0.14
-scipy>=1.11
-matplotlib>=3.7
-seaborn>=0.12
-jupyter>=1.0
+python src/data_generation.py        # generate simulated data
+python -m jupytext --to notebook notebooks/*.py
+jupyter notebook notebooks/          # run 01 → 00 → 02 → 03 → 04 → 05
 ```
 
 ---
 
-## Methodology Notes
+## Limitations
 
-### Why simulation?
-
-Real experimental data from the locker network is confidential. This simulation uses **calibrated parameters** — effect sizes, variance, store distributions, and seasonal patterns — grounded in real operational observations. The Data Generating Process (DGP) is fully documented in `src/data_generation.py` and `notebooks/01_Data_Preparation.ipynb`.
-
-This approach lets us:
-1. Demonstrate the full causal inference pipeline on a realistic problem
-2. Validate estimators against known ground truth
-3. Show how DGP assumptions affect conclusions (sensitivity)
-
-### Why do we need causal inference if stores were randomly assigned?
-
-Random assignment (within the 5D group) justifies a simple comparison for the 5D arms. But:
-
-- The **6D group** was assigned by store inventory level, not randomly → PSM needed
-- Even with randomisation, **store FE** in DiD removes residual covariate imbalance
-- **HTE** requires meta-learners regardless of assignment mechanism
-- **Sensitivity analysis** is always warranted with observational elements
-
-### Limitations
-
-- One pre-period (BM week) limits the parallel trends test
-- Self-report: collection hours are system-logged, but store categorisation relies on historical thresholds which may shift
-- External validity: results apply to burst-store conditions; vacant store dynamics differ
-- CNY exclusion is justified but reduces post-treatment sample by one week
+- Single pre-treatment week limits formal pre-trend testing (mitigated by confirming baseline balance and an immediate, stable post-treatment effect)
+- Simulated data — no novel real-world discovery; the goal is to demonstrate the analytical pipeline with operationally realistic parameters
+- Small per-arm sample (n=100) leaves residual covariate imbalance after randomization, addressed via PSM
+- Excluded one experiment week (Chinese New Year) for a valid seasonal confound; leave-one-out testing confirms this doesn't drive the result
 
 ---
 
 ## About
 
-Built as a portfolio project demonstrating applied causal inference for product and experimentation science roles.
+**Methods**: Difference-in-Differences · Propensity Score Matching · T/S/X-Learner · Causal Forest DML · Rosenbaum Bounds
+**Tools**: Python · statsmodels · scikit-learn · matplotlib
+**Background**: HarvardX Causal Inference (verified); 2.5 years designing and analyzing nationwide A/B experiments in e-commerce logistics
 
-**Methods**: Difference-in-Differences · Propensity Score Matching · T/S/X-Learner · Causal Forest DML · Rosenbaum Bounds  
-**Tools**: Python · statsmodels · scikit-learn · matplotlib  
-**Certificate**: HarvardX — Causal Inference (verified)  
-**Industry context**: Based on experimentation work in last-mile logistics at a Southeast Asian e-commerce platform
-
----
-
-*Questions or feedback? Open an issue or reach out via [LinkedIn](https://linkedin.com/in/yourprofile).*
+*Built as a portfolio project for Product Analytics / Experimentation Scientist roles.*
