@@ -56,11 +56,11 @@ A strategy is only "good" if it moves the North Star **without** breaching the g
   │  Control │ 5-day deadline │ D0, D4          │ 2 touches │ n=100 │
   │  G2      │ 5-day deadline │ D0, D2, D4      │ 3 touches │ n=100 │
   │  G4      │ 5-day deadline │ D0–D4 (daily)   │ 5 touches │ n=100 │
-  │  6D      │ 6-day deadline │ D0, D5          │ 2 touches │ n=700 │
+  │  6D      │ 6-day deadline │ D0, D4          │ 2 touches │ n=700 │
   └──────────────────────────────────────────────────────────┘
 
 1,000 vacant stores (low inventory)
-  → 7D: 7-day deadline, D0/D6, 2 touches (pilot-only comparison arm)
+  → 7D: 7-day deadline, D0/D4, 2 touches (pilot-only comparison arm)
 
 Timeline: 1 baseline week + 4 experiment weeks
 Excluded: Chinese New Year eve week (seasonal pickup-speed confound)
