@@ -52,12 +52,12 @@ A strategy is only "good" if it moves the North Star **without** breaching the g
 1,000 burst stores (high inventory, >5% order-closure hours)
   → randomly split into:
 
-  ┌──────────────────────────────────────────────────────────┐
+  ┌───────────────────────────────────────────────────────────────────┐
   │  Control │ 5-day deadline │ D0, D4          │ 2 touches │ n=100 │
   │  G2      │ 5-day deadline │ D0, D2, D4      │ 3 touches │ n=100 │
   │  G4      │ 5-day deadline │ D0–D4 (daily)   │ 5 touches │ n=100 │
   │  6D      │ 6-day deadline │ D0, D4          │ 2 touches │ n=700 │
-  └──────────────────────────────────────────────────────────┘
+  └───────────────────────────────────────────────────────────────────┘
 
 1,000 vacant stores (low inventory)
   → 7D: 7-day deadline, D0/D4, 2 touches (pilot-only comparison arm)
