@@ -21,6 +21,8 @@
 
 **Impact**: At 800K parcels/day, this reduces return-to-sender volume by an estimated **2,880 parcels/day** and frees locker capacity faster, improving throughput without added headcount.
 
+![Collection Hours Trend by Group](outputs/figures/01_collection_hrs_trend.png)
+
 ---
 
 ## The Business Problem
@@ -97,6 +99,8 @@ Heterogeneity analysis (4 independent estimators — T/S/X-Learner, Causal Fores
 
 **Counter-intuitive finding**: notification reminders work *better* in non-metro stores, not metro ones. Buyers there appear to have weaker baseline pickup habits, so a nudge moves the needle more. Geographic location explains almost none of the variation (feature importance: 0.003); **store capacity** is the dominant driver (feature importance: 1.33, 5x the next variable) — bigger stores, where pickup delay is more costly operationally, also see larger behavioral response to reminders.
 
+![Subgroup Treatment Effects by Store Type](outputs/figures/12_subgroup_waterfall.png)
+
 **95% of stores (285/300)** show a meaningful individual effect (CATE < −0.5h), so a full rollout is justified without complex targeting logic. If budget is constrained, non-metro and high-capacity stores offer the best marginal ROI.
 
 ---
@@ -119,6 +123,9 @@ We address this with two independent causal designs that should agree if the eff
 
 Two methods built on different assumptions land within 9% of each other — strong evidence the effect is real, not an artifact of store selection.
 
+![Event Study: Dynamic Treatment Effect Over Time](outputs/figures/06_event_study.png)
+![Covariate Balance Before/After Matching (Love Plot)](outputs/figures/09_love_plot.png)
+
 ---
 
 ## Is This Result Trustworthy? (Sensitivity Checks)
@@ -132,6 +139,8 @@ Two methods built on different assumptions land within 9% of each other — stro
 | **Placebo outcomes** | Does the "effect" show up where it shouldn't? | Small mechanical increase in complaint/opt-out rate (expected — more touches = more messages), no evidence of broader confounding |
 
 **Bottom line**: this is one of the more robust findings you'll see in an applied experiment — it survives every standard stress test.
+
+![Rosenbaum Sensitivity Bounds (Γ ≥ 3.0)](outputs/figures/16_rosenbaum_bounds.png)
 
 ---
 
