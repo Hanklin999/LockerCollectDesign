@@ -21,6 +21,8 @@
 
 **Impact**: At 800K parcels/day, this reduces return-to-sender volume by an estimated **2,880 parcels/day** and frees locker capacity faster, improving throughput without added headcount.
 
+![Collection Hours Trend by Group](outputs/figures/01_collection_hrs_trend.png)
+
 ---
 
 ## The Business Problem
@@ -52,15 +54,15 @@ A strategy is only "good" if it moves the North Star **without** breaching the g
 1,000 burst stores (high inventory, >5% order-closure hours)
   → randomly split into:
 
-  ┌──────────────────────────────────────────────────────────┐
+  ┌─────────────────────────────────────────────────────────────────┐
   │  Control │ 5-day deadline │ D0, D4          │ 2 touches │ n=100 │
   │  G2      │ 5-day deadline │ D0, D2, D4      │ 3 touches │ n=100 │
   │  G4      │ 5-day deadline │ D0–D4 (daily)   │ 5 touches │ n=100 │
-  │  6D      │ 6-day deadline │ D0, D5          │ 2 touches │ n=700 │
-  └──────────────────────────────────────────────────────────┘
+  │  6D      │ 6-day deadline │ D0, D4          │ 2 touches │ n=700 │
+  └─────────────────────────────────────────────────────────────────┘
 
 1,000 vacant stores (low inventory)
-  → 7D: 7-day deadline, D0/D6, 2 touches (pilot-only comparison arm)
+  → 7D: 7-day deadline, D0/D4, 2 touches (pilot-only comparison arm)
 
 Timeline: 1 baseline week + 4 experiment weeks
 Excluded: Chinese New Year eve week (seasonal pickup-speed confound)
@@ -99,6 +101,8 @@ Heterogeneity analysis (4 independent estimators — T/S/X-Learner, Causal Fores
 
 **Store capacity is the dominant driver** of effect heterogeneity (feature importance: 1.33, 5x the next variable). The operational interpretation: larger stores serve more buyers per notification wave and have more slots at risk when pickup stalls — so each hour of faster collection unlocks more absolute capacity, and buyers at high-throughput locations appear more responsive to timely reminders. In practice this means the stores where congestion hurts most are also the stores where the fix works best.
 
+![Subgroup Treatment Effects by Store Type](outputs/figures/12_subgroup_waterfall.png)
+
 **95% of stores (285/300)** show a meaningful individual effect (CATE < −0.5h), so a full rollout is justified without complex targeting logic. If budget is constrained, non-metro and high-capacity stores offer the best marginal ROI.
 
 ---
@@ -126,6 +130,9 @@ We address this with two independent causal designs that should agree if the eff
 
 Two methods built on different assumptions land within 9% of each other — strong evidence the effect is real, not an artifact of store selection.
 
+![Event Study: Dynamic Treatment Effect Over Time](outputs/figures/06_event_study.png)
+![Covariate Balance Before/After Matching (Love Plot)](outputs/figures/09_love_plot.png)
+
 ---
 
 ## Is This Result Trustworthy? (Sensitivity Checks)
@@ -139,6 +146,8 @@ Two methods built on different assumptions land within 9% of each other — stro
 | **Placebo outcomes** | Does the "effect" show up where it shouldn't? | Extra touches raise complaint and opt-out rates by < 0.001 percentage points — a direct, expected side effect of sending more messages, not evidence of confounding. Worth monitoring at scale. |
 
 **Bottom line**: this is one of the more robust findings you'll see in an applied experiment — it survives every standard stress test.
+
+![Rosenbaum Sensitivity Bounds (Γ ≥ 3.0)](outputs/figures/16_rosenbaum_bounds.png)
 
 ---
 
