@@ -15,7 +15,7 @@
 
 **Question**: How many pickup-reminder notifications should we send, and to which stores?
 
-**Finding**: Increasing notification touches from 2 to 3 reduces parcel collection time by **1.2–1.7 hours**, validated by two independent causal methods. A 4th and 5th touch add only **0.2–0.6 additional hours** — diminishing returns.
+**Finding**: Increasing notification touches from 2 to 3 reduces parcel collection time by **1.2–1.7 hours**, validated by two independent causal methods. A 4th and 5th touch add only **0.3–0.6 additional hours** — diminishing returns.
 
 **Recommendation**: Roll out the 3-touch strategy network-wide, prioritizing non-metro and high-capacity stores where the effect is largest.
 
@@ -75,12 +75,12 @@ Pilot sizing (100/100/100 vs 700/1000) reflects a real-world constraint: full ne
 | Option | Collection Time Impact | Cost | Recommendation |
 |--------|------------------------|------|-----------------|
 | **A — Keep 2 touches** | Baseline (33.7h) | Lowest | ❌ Leaves easy gains on the table |
-| **B — 3 touches (G2)** | **−1.2 to −1.5h** (DiD / PSM) | +1 notification/parcel | ✅ **Ship this** |
+| **B — 3 touches (G2)** | **−1.2 to −1.6h** (DiD / PSM) | +1 notification/parcel | ✅ **Ship this** |
 | **C — 5 touches (G4)** | −1.8 to −1.9h | +3 notifications/parcel | ❌ Marginal gain (+0.3–0.6h over B) doesn't justify 3x the notification cost or opt-out risk |
 
 **Decision: Ship Option B (3-touch cadence) network-wide.**
 
-The 4th and 5th touches in Option C are not statistically distinguishable from Option B's *marginal* contribution once cost and guardrail risk are weighed — classic diminishing returns.
+The 4th and 5th touches in Option C add only marginal benefit once cost and guardrail risk are weighed — classic diminishing returns.
 
 ---
 
@@ -95,7 +95,9 @@ Heterogeneity analysis (4 independent estimators — T/S/X-Learner, Causal Fores
 | Low-utilization stores | −2.1h | ✅ Yes |
 | High-utilization stores | −1.6h | Standard priority |
 
-**Counter-intuitive finding**: notification reminders work *better* in non-metro stores, not metro ones. Buyers there appear to have weaker baseline pickup habits, so a nudge moves the needle more. Geographic location explains almost none of the variation (feature importance: 0.003); **store capacity** is the dominant driver (feature importance: 1.33, 5x the next variable) — bigger stores, where pickup delay is more costly operationally, also see larger behavioral response to reminders.
+**Counter-intuitive finding**: notification reminders work *better* in non-metro stores, not metro ones. Buyers there appear to have weaker baseline pickup habits, so a nudge moves the needle more. Geographic location explains almost none of the variation (feature importance: 0.003).
+
+**Store capacity is the dominant driver** of effect heterogeneity (feature importance: 1.33, 5x the next variable). The operational interpretation: larger stores serve more buyers per notification wave and have more slots at risk when pickup stalls — so each hour of faster collection unlocks more absolute capacity, and buyers at high-throughput locations appear more responsive to timely reminders. In practice this means the stores where congestion hurts most are also the stores where the fix works best.
 
 **95% of stores (285/300)** show a meaningful individual effect (CATE < −0.5h), so a full rollout is justified without complex targeting logic. If budget is constrained, non-metro and high-capacity stores offer the best marginal ROI.
 
@@ -105,11 +107,16 @@ Heterogeneity analysis (4 independent estimators — T/S/X-Learner, Causal Fores
 
 A naive comparison (3-touch stores vs. 2-touch stores) shows a **−1.75h gap**. But stores weren't randomly given a notification policy in a vacuum — store characteristics (inventory pressure, traffic, capacity) co-determine both the policy a store receives *and* its baseline pickup speed. Comparing raw averages would conflate "the notification worked" with "this store was always going to collect faster."
 
+Two additional wrinkles make simple comparison unreliable even within the randomized arms:
+
+1. **The 6D group was assigned by inventory level, not randomized** — any comparison involving it needs explicit adjustment.
+2. **Randomization at n=100 per arm leaves residual imbalance**: at baseline, G4 vs Control differed meaningfully on closure hours (SMD = 0.36) and capacity (SMD = 0.26). Small samples randomize imperfectly — this is exactly the situation where a matching-based cross-check earns its keep.
+
 We address this with two independent causal designs that should agree if the effect is real:
 
 **1. Difference-in-Differences** — removes store-level and time-level confounds by comparing the *change* in collection time for treated vs. control stores, before vs. after the policy change.
 
-**2. Propensity Score Matching** — pairs each treated store with a statistically similar control store (matched on utilization rate, volume, capacity, metro status) before comparing outcomes.
+**2. Propensity Score Matching** — pairs each treated store with a statistically similar control store (matched on utilization rate, volume, capacity, metro status) before comparing outcomes. After matching, all major covariates reach balance (SMD < 0.1).
 
 | Method | Estimated Effect | 95% CI |
 |--------|-------------------|--------|
@@ -129,7 +136,7 @@ Two methods built on different assumptions land within 9% of each other — stro
 | **Rosenbaum bounds** | How strong would an unmeasured confounder need to be to overturn this? | Holds up to **Γ ≥ 3.0** — far beyond the conventional Γ > 1.5 robustness bar |
 | **Leave-one-week-out** | Is one unusual week driving the whole result? | Estimate varies by at most 0.1h when any single week is dropped |
 | **Covariate stability** | Does adding more controls change the answer? | 0% change from simplest to fullest model specification |
-| **Placebo outcomes** | Does the "effect" show up where it shouldn't? | Small mechanical increase in complaint/opt-out rate (expected — more touches = more messages), no evidence of broader confounding |
+| **Placebo outcomes** | Does the "effect" show up where it shouldn't? | Extra touches raise complaint and opt-out rates by < 0.001 percentage points — a direct, expected side effect of sending more messages, not evidence of confounding. Worth monitoring at scale. |
 
 **Bottom line**: this is one of the more robust findings you'll see in an applied experiment — it survives every standard stress test.
 
@@ -141,7 +148,7 @@ Two methods built on different assumptions land within 9% of each other — stro
 |----------------------|---------------------------|
 | −1.5h average collection time | Faster slot turnover → more locker capacity available per day without new hardware |
 | −0.36pp RTS rate | ≈ **2,880 fewer returned parcels/day** at 800K parcels/day volume |
-| Diminishing returns beyond 3 touches | Avoids ~40% extra notification spend (5 vs 3 touches) for <0.3h of additional benefit |
+| Diminishing returns beyond 3 touches | Avoids ~40% extra notification spend (5 vs 3 touches) for <0.6h of additional benefit |
 | 95% of stores benefit | No targeting infrastructure needed — simple network-wide rollout |
 
 ---
@@ -204,6 +211,7 @@ jupyter notebook notebooks/          # run 01 → 00 → 02 → 03 → 04 → 05
 - Simulated data — no novel real-world discovery; the goal is to demonstrate the analytical pipeline with operationally realistic parameters
 - Small per-arm sample (n=100) leaves residual covariate imbalance after randomization, addressed via PSM
 - Excluded one experiment week (Chinese New Year) for a valid seasonal confound; leave-one-out testing confirms this doesn't drive the result
+- Extra notification touches increase complaint and opt-out rates by < 0.001 percentage points — operationally negligible but worth monitoring at scale
 
 ---
 
@@ -213,4 +221,6 @@ jupyter notebook notebooks/          # run 01 → 00 → 02 → 03 → 04 → 05
 **Tools**: Python · statsmodels · scikit-learn · matplotlib
 **Background**: HarvardX Causal Inference (verified); 2.5 years designing and analyzing nationwide A/B experiments in e-commerce logistics
 
-*Built as a portfolio project for Product Analytics / Experimentation Scientist roles.*
+Built as a portfolio project for Product Analytics / Experimentation Scientist roles.
+
+*Questions or feedback? Open an issue or reach out via [LinkedIn](https://linkedin.com/in/hank-lin-ch17).*
