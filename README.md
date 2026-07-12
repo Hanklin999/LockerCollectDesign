@@ -1,235 +1,238 @@
 # 📦 How Many Notifications Should We Send?
 
-### A Product Analytics Case Study on Notification Strategy and Parcel Pickup Behavior
+### A Product Data Science Case Study — Notification Cadence & Locker Pickup Behavior
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22C55E?style=flat)](LICENSE)
 [![Methods](https://img.shields.io/badge/Methods-DiD%20%7C%20PSM%20%7C%20HTE%20%7C%20Sensitivity-6366F1?style=flat)]()
 [![Data](https://img.shields.io/badge/Data-Calibrated%20Simulation-F59E0B?style=flat)]()
 
 ---
 
-## TL;DR
-
-**Problem**: Locker congestion at high-inventory stores reduces network throughput and increases return-to-sender rates.
-
-**Question**: How many pickup-reminder notifications should we send, and to which stores?
-
-**Finding**: Increasing notification touches from 2 to 3 reduces parcel collection time by **1.2–1.7 hours**, validated by two independent causal methods. A 4th and 5th touch add only **0.3–0.6 additional hours** — diminishing returns.
-
-**Recommendation**: Roll out the 3-touch strategy network-wide, prioritizing non-metro and high-capacity stores where the effect is largest.
-
-**Impact**: At 800K parcels/day, this reduces return-to-sender volume by an estimated **2,880 parcels/day** and frees locker capacity faster, improving throughput without added headcount.
-
-![Collection Hours Trend by Group](outputs/figures/01_collection_hrs_trend.png)
-
----
-
-## The Business Problem
-
-Smart locker networks have a fixed asset: locker slots. When buyers don't collect parcels promptly, slots stay occupied, new parcels can't be processed, and stores hit capacity ("burst") — triggering order pauses and operational firefighting.
-
-Push notifications are the cheapest lever available to drive faster pickup. But more notifications also mean more cost and a real risk of notification fatigue (complaints, opt-outs). The team needed a number: **what's the right number of touches?**
-
----
-
-## Product Metrics Framework
-
-| Tier | Metric | Why it matters |
-|------|--------|-----------------|
-| **North Star** | `collection_hrs` — hours from parcel arrival to pickup | Directly drives locker turnover and capacity availability |
-| **Secondary** | `rts_rate` — % of parcels returned to sender | Captures the tail-risk failure mode of slow pickup |
-| **Guardrail** | `complaint_rate` | Detects notification fatigue |
-| **Guardrail** | `opt_out_rate` | Detects long-term channel erosion |
-
-A strategy is only "good" if it moves the North Star **without** breaching the guardrails.
-
----
-
-## Experiment Design
-
-**Unit of randomization**: Store (not buyer) — notifications are configured at the store/locker level, so store-level randomization avoids cross-contamination between buyers at the same location.
+## The Product Story
 
 ```
-1,000 burst stores (high inventory, >5% order-closure hours)
-  → randomly split into:
-
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  Control │ 5-day deadline │ D0, D4          │ 2 touches │ n=100 │
-  │  G2      │ 5-day deadline │ D0, D2, D4      │ 3 touches │ n=100 │
-  │  G4      │ 5-day deadline │ D0–D4 (daily)   │ 5 touches │ n=100 │
-  │  6D      │ 6-day deadline │ D0, D4          │ 2 touches │ n=700 │
-  └─────────────────────────────────────────────────────────────────┘
-
-1,000 vacant stores (low inventory)
-  → 7D: 7-day deadline, D0/D4, 2 touches (pilot-only comparison arm)
-
-Timeline: 1 baseline week + 4 experiment weeks
-Excluded: Chinese New Year eve week (seasonal pickup-speed confound)
+Buyers delay locker pickup
+        ↓
+Slots stay occupied → stores hit capacity ("burst")
+        ↓
+New parcels can't inbound → order pauses, RTS returns climb
+        ↓
+Network throughput and Next-Day Delivery reliability degrade
+        ↓
+Question: can push notifications fix this — and how many should we send?
 ```
 
-Pilot sizing (100/100/100 vs 700/1000) reflects a real-world constraint: full network rollout wasn't feasible up front, so the team ran a smaller controlled pilot on the 5-day groups before scaling the deadline-only change to more stores. This pilot-then-scale pattern is a common compromise in operational experimentation.
+**The decision on the table**: keep 2 notification touches per parcel, upgrade to 3, or go all-in with 5?
+
+**The answer** (skip ahead if you only have 30 seconds):
+
+> **Ship 3 touches, network-wide.** It cuts collection time by **~1.5 hours per parcel** and RTS returns by **~2,880 parcels/day**. Touches 4 and 5 add almost nothing but cost and opt-out risk. If rollout must be staged, start with **non-metro, high-capacity stores** — the effect there is 40% larger.
+
+Everything below is how we know that's true, and not just a correlation.
 
 ---
 
-## Decision Memo: Which Cadence Should We Ship?
+## The Causal Question
 
-| Option | Collection Time Impact | Cost | Recommendation |
-|--------|------------------------|------|-----------------|
-| **A — Keep 2 touches** | Baseline (33.7h) | Lowest | ❌ Leaves easy gains on the table |
-| **B — 3 touches (G2)** | **−1.2 to −1.6h** (DiD / PSM) | +1 notification/parcel | ✅ **Ship this** |
-| **C — 5 touches (G4)** | −1.8 to −1.9h | +3 notifications/parcel | ❌ Marginal gain (+0.3–0.6h over B) doesn't justify 3x the notification cost or opt-out risk |
+Stores with more notification touches collect faster. But is that **because of the notifications** — or because those stores were different to begin with?
 
-**Decision: Ship Option B (3-touch cadence) network-wide.**
+```
+                Store Traits
+        (traffic, capacity, inventory)
+              ↙            ↘
+   Notification Policy   Baseline Pickup Speed
+              ↘            ↙
+            Collection Time
+                    ↑
+          Holiday / Seasonality
+```
 
-The 4th and 5th touches in Option C add only marginal benefit once cost and guardrail risk are weighed — classic diminishing returns.
+Store traits drive **both** which policy a store gets **and** how fast its buyers pick up. Holidays shift pickup speed for everyone. Comparing raw averages mixes all of this together.
+
+<p align="center"><img src="outputs/figures/04_dag.png" width="640" alt="Causal DAG"></p>
+
+---
+
+## Why This Method? (Not That One)
+
+| Tempting shortcut | Why it fails here |
+|---|---|
+| **Just compare group means** | Burst stores are 84% metro; assignment is entangled with store traits. The naive gap (−1.75h) can't separate "notifications work" from "these stores were always faster." |
+| **Regression with control variables** | Only adjusts for confounders you *thought to measure*. Anything unmeasured (staff behavior, local buyer demographics) still leaks in. |
+| **"It's already an A/B test, just read the delta"** | Partly true — the three 5-day arms *were* randomized. But (a) the 6D arm was assigned by inventory level, not randomly, and (b) at n=100/arm, randomization is imperfect: G4 vs Control differed at baseline on closure hours (SMD 0.36) and capacity (SMD 0.26). |
+| **✅ DiD (two-way fixed effects)** | Store fixed effects absorb **every** time-invariant store difference — measured or not. Week fixed effects absorb holidays and common shocks. What's left is the policy's causal effect. |
+| **✅ PSM as a cross-check** | Rebuilds the comparison from a different direction: match each treated store to its statistical twin, *then* compare. If two methods with different assumptions agree, the effect is real. |
+
+---
+
+## Method 1 — Difference-in-Differences
+
+**Identifying assumption**: absent the policy change, treated and control stores would have moved in parallel.
+
+The pre-period levels sit together; the gap opens only after treatment starts:
+
+<p align="center"><img src="outputs/figures/05_parallel_trends.png" width="720" alt="Parallel trends"></p>
+
+The effect appears in week 1 and holds through week 4 — no ramp-up delay, no fade-out:
+
+<p align="center"><img src="outputs/figures/06_event_study.png" width="720" alt="Event study"></p>
+
+| Estimate | Effect | 95% CI | p |
+|---|---|---|---|
+| G2+G4 vs Control (two-way FE) | **−1.505h** | [−1.97, −1.04] | <0.001 |
+| G2 (3 touches) vs Control | −1.228h | — | <0.001 |
+| G4 (5 touches) vs Control | −1.782h | — | <0.001 |
+| **Marginal value of touches 4–5** | **−0.555h** | — | — |
+
+The 3rd touch does most of the work. Touches 4–5 buy half an hour for 3x the message volume.
+
+---
+
+## Method 2 — Propensity Score Matching (the cross-check)
+
+**The concern**: small-sample randomization left the arms imbalanced on exactly the traits that predict pickup speed.
+
+**The fix**: match each treated store to its most similar control store, then compare. Balance before vs. after:
+
+<p align="center"><img src="outputs/figures/09_love_plot.png" width="640" alt="Love plot — SMD before/after matching"></p>
+
+<p align="center"><img src="outputs/figures/10_ps_overlap.png" width="720" alt="Propensity score overlap"></p>
+
+All major covariates reach SMD < 0.1 after matching (99% of treated stores matched within caliper).
+
+| Method | Effect | Agreement |
+|---|---|---|
+| DiD | −1.505h | — |
+| PSM (ATT) | −1.654h | **within 9%** |
+
+Two identification strategies, different assumptions, same answer. The PSM sample also shows **RTS rate −0.36pp** (95% CI [−0.38, −0.34]) — the tail-risk metric moves too.
 
 ---
 
 ## Where Should We Roll Out First?
 
-Heterogeneity analysis (4 independent estimators — T/S/X-Learner, Causal Forest DML) shows the effect is **not uniform** across stores. Rolling out everywhere at once is fine here (95% of stores benefit), but if rollout needs to be staged, prioritize by these findings:
+Four independent CATE estimators (T/S/X-Learner, Causal Forest DML) agree the effect is real everywhere but **not uniform**:
 
-| Segment | Effect Size | Take First? |
-|---------|-------------|-------------|
-| **Non-metro stores** | **−2.4h** | ✅ Yes — largest effect |
-| Metro stores | −1.7h | Standard priority |
-| Low-utilization stores | −2.1h | ✅ Yes |
-| High-utilization stores | −1.6h | Standard priority |
+<p align="center"><img src="outputs/figures/12_subgroup_waterfall.png" width="720" alt="Treatment effect by segment"></p>
 
-**Counter-intuitive finding**: notification reminders work *better* in non-metro stores, not metro ones. Buyers there appear to have weaker baseline pickup habits, so a nudge moves the needle more. Geographic location explains almost none of the variation (feature importance: 0.003).
+| Segment | Effect | Priority |
+|---|---|---|
+| Non-metro stores | **−2.4h** | 🥇 First wave |
+| High-capacity stores | Largest heterogeneity driver | 🥇 First wave |
+| Metro stores | −1.7h | Second wave |
+| Low-benefit tail | −0.2h (15 stores, 5%) | Deprioritize |
 
-**Store capacity is the dominant driver** of effect heterogeneity (feature importance: 1.33, 5x the next variable). The operational interpretation: larger stores serve more buyers per notification wave and have more slots at risk when pickup stalls — so each hour of faster collection unlocks more absolute capacity, and buyers at high-throughput locations appear more responsive to timely reminders. In practice this means the stores where congestion hurts most are also the stores where the fix works best.
+**What drives the difference?** Not geography — store **capacity** (feature importance 1.33, 5x the next variable; `is_metro` scores 0.003):
 
-![Subgroup Treatment Effects by Store Type](outputs/figures/12_subgroup_waterfall.png)
+<p align="center"><img src="outputs/figures/14_feature_importance.png" width="640" alt="Feature importance for heterogeneity"></p>
 
-**95% of stores (285/300)** show a meaningful individual effect (CATE < −0.5h), so a full rollout is justified without complex targeting logic. If budget is constrained, non-metro and high-capacity stores offer the best marginal ROI.
-
----
-
-## Why We Can't Just Compare Group Averages
-
-A naive comparison (3-touch stores vs. 2-touch stores) shows a **−1.75h gap**. But stores weren't randomly given a notification policy in a vacuum — store characteristics (inventory pressure, traffic, capacity) co-determine both the policy a store receives *and* its baseline pickup speed. Comparing raw averages would conflate "the notification worked" with "this store was always going to collect faster."
-
-Two additional wrinkles make simple comparison unreliable even within the randomized arms:
-
-1. **The 6D group was assigned by inventory level, not randomized** — any comparison involving it needs explicit adjustment.
-2. **Randomization at n=100 per arm leaves residual imbalance**: at baseline, G4 vs Control differed meaningfully on closure hours (SMD = 0.36) and capacity (SMD = 0.26). Small samples randomize imperfectly — this is exactly the situation where a matching-based cross-check earns its keep.
-
-We address this with two independent causal designs that should agree if the effect is real:
-
-**1. Difference-in-Differences** — removes store-level and time-level confounds by comparing the *change* in collection time for treated vs. control stores, before vs. after the policy change.
-
-**2. Propensity Score Matching** — pairs each treated store with a statistically similar control store (matched on utilization rate, volume, capacity, metro status) before comparing outcomes. After matching, all major covariates reach balance (SMD < 0.1).
-
-| Method | Estimated Effect | 95% CI |
-|--------|-------------------|--------|
-| DiD (two-way fixed effects) | **−1.505h** | [−1.97, −1.04] |
-| PSM (ATT, matched) | **−1.654h** | [−1.88, −1.43] |
-| **Agreement** | within 9% of each other | — |
-
-Two methods built on different assumptions land within 9% of each other — strong evidence the effect is real, not an artifact of store selection.
-
-![Event Study: Dynamic Treatment Effect Over Time](outputs/figures/06_event_study.png)
-![Covariate Balance Before/After Matching (Love Plot)](outputs/figures/09_love_plot.png)
+The operational read: big stores serve more buyers per notification wave and have more slots at risk when pickup stalls — each hour of faster collection unlocks more absolute capacity. **The stores where congestion hurts most are the stores where the fix works best.** The non-metro finding is the counter-intuitive bonus: buyers there have weaker baseline pickup habits, so a reminder moves them more.
 
 ---
 
-## Is This Result Trustworthy? (Sensitivity Checks)
+## Can We Trust This? (Stress Tests)
 
-| Check | Question Asked | Result |
-|-------|------------------|--------|
-| **Permutation test** | Could random chance produce this result? | 500 random reshuffles never came close (p < 0.001) |
-| **Rosenbaum bounds** | How strong would an unmeasured confounder need to be to overturn this? | Holds up to **Γ ≥ 3.0** — far beyond the conventional Γ > 1.5 robustness bar |
-| **Leave-one-week-out** | Is one unusual week driving the whole result? | Estimate varies by at most 0.1h when any single week is dropped |
-| **Covariate stability** | Does adding more controls change the answer? | 0% change from simplest to fullest model specification |
-| **Placebo outcomes** | Does the "effect" show up where it shouldn't? | Extra touches raise complaint and opt-out rates by < 0.001 percentage points — a direct, expected side effect of sending more messages, not evidence of confounding. Worth monitoring at scale. |
+| Test | Question | Verdict |
+|---|---|---|
+| Permutation (500 reshuffles) | Could chance produce −1.5h? | Never came close (p < 0.001) |
+| Rosenbaum bounds | How strong must a hidden confounder be to kill the result? | **Γ ≥ 3.0** — double the conventional 1.5 robustness bar |
+| Leave-one-week-out | Is one weird week carrying it? | Max shift 0.1h |
+| Covariate stability | Does adding controls move the estimate? | 0.0% change across 7 specifications |
+| Placebo outcomes | Effects where there shouldn't be? | Complaints/opt-outs rise < 0.001pp — the expected mechanical cost of sending more messages, not confounding |
 
-**Bottom line**: this is one of the more robust findings you'll see in an applied experiment — it survives every standard stress test.
-
-![Rosenbaum Sensitivity Bounds (Γ ≥ 3.0)](outputs/figures/16_rosenbaum_bounds.png)
+<p align="center"><img src="outputs/figures/16_rosenbaum_bounds.png" width="640" alt="Rosenbaum sensitivity bounds"></p>
 
 ---
 
-## Business Impact Translation
-
-| Statistical Result | Operational Translation |
-|----------------------|---------------------------|
-| −1.5h average collection time | Faster slot turnover → more locker capacity available per day without new hardware |
-| −0.36pp RTS rate | ≈ **2,880 fewer returned parcels/day** at 800K parcels/day volume |
-| Diminishing returns beyond 3 touches | Avoids ~40% extra notification spend (5 vs 3 touches) for <0.6h of additional benefit |
-| 95% of stores benefit | No targeting infrastructure needed — simple network-wide rollout |
-
----
-
-## Methods Reference
-
-| Notebook | Method | Used To Answer |
-|----------|--------|-----------------|
-| `00` | EDA + Causal DAG | What confounds the naive comparison? |
-| `01` | Data Preparation | How is the simulation calibrated to real ops data? |
-| `02` | Difference-in-Differences | Did the policy *cause* faster pickup? |
-| `03` | Propensity Score Matching | Does the result hold after balancing store characteristics? |
-| `04` | Heterogeneous Treatment Effects | Where should we prioritize rollout? |
-| `05` | Sensitivity Analysis | How much do we trust this? |
-
-Full statistical detail, tables, and method documentation: see [**RESULTS.md**](RESULTS.md) (English) and [**RESULTS_zh.md**](RESULTS_zh.md) (繁體中文).
-
----
-
-## Data Note
-
-Real locker-network data is confidential. This project uses a **calibrated simulation**: every parameter (baseline collection time, effect sizes, store volume distribution, seasonal patterns) is set to match values actually observed in a real nationwide notification experiment. The full data-generating process is documented and auditable in `src/data_generation.py` and `notebooks/01_Data_Preparation.ipynb`.
-
----
-
-## Repository Structure
+## Business Recommendation
 
 ```
-LockerCollectDesign/
-│
-├── data/processed/          # Simulated store metadata + weekly panel
-├── notebooks/                # 00–05, run in order
-├── src/                       # Reusable estimator + plotting modules
-├── outputs/figures/          # All 19 generated plots
-├── README.md                 # You are here
-├── RESULTS.md                 # Full technical writeup (English)
-├── RESULTS_zh.md              # Full technical writeup (繁體中文)
-└── requirements.txt
+Ship the 3-touch cadence (D0, D2, D4)
+        ↓
+Stage rollout: non-metro + high-capacity burst stores first
+        ↓
+Expected per-parcel impact:   collection time  −1.5h
+Expected network impact:      RTS returns      −0.36pp  (≈ 2,880 fewer/day at 800K volume)
+                              locker turnover  ↑ (capacity freed ~1.5h earlier per slot cycle)
+        ↓
+Do NOT ship 5 touches: +0.3–0.6h benefit for 3x message cost
+        ↓
+Monitor guardrails at scale: complaint rate, opt-out rate
+(small mechanical increase confirmed — set alert thresholds before full rollout)
 ```
+
+**Metrics framework behind the decision:**
+
+| Tier | Metric | Role in the decision |
+|---|---|---|
+| North Star | `collection_hrs` | The thing we're optimizing |
+| Secondary | `rts_rate` | Tail-risk failure mode |
+| Guardrails | `complaint_rate`, `opt_out_rate` | The cost we refuse to pay |
+
+A cadence only "wins" if it moves the North Star without breaching guardrails. 3 touches does; 5 touches starts paying guardrail cost for negligible gain.
 
 ---
 
-## Setup
+## Experiment Design (Reference)
+
+**Randomization unit**: store — notification policy is configured per locker location; store-level assignment prevents cross-contamination between buyers at one site.
+
+```
+1,000 burst stores (>5% order-closure hours) →
+
+  Control │ 5-day deadline │ D0, D4        │ 2 touches │ n=100
+  G2      │ 5-day deadline │ D0, D2, D4    │ 3 touches │ n=100
+  G4      │ 5-day deadline │ D0–D4 daily   │ 5 touches │ n=100
+  6D      │ 6-day deadline │ D0, D5        │ 2 touches │ n=700
+
+1,000 vacant stores → 7D arm (comparison only)
+
+Timeline: 1 baseline week + 4 treatment weeks
+Excluded: Chinese New Year week (documented seasonal confound;
+          leave-one-out confirms no single week drives the result)
+```
+
+Pilot sizing (100/100/100 vs 700) reflects the real constraint that full rollout wasn't feasible up front — pilot-then-scale is the standard compromise in operational experimentation.
+
+**Data**: calibrated simulation. Real locker-network data is confidential; every parameter (baseline collection time, effect sizes, volume distributions, seasonality) is set to values observed in the real nationwide experiment. The data-generating process is fully documented in `src/data_generation.py` and `notebooks/01_Data_Preparation.ipynb` — which also means every estimator here is validated against known ground truth.
+
+---
+
+## Repository Guide
+
+| You want... | Go to |
+|---|---|
+| The full statistical writeup (every table, every CI) | [**RESULTS.md**](RESULTS.md) |
+| 中文完整說明（含名詞解釋） | [**RESULTS_zh.md**](RESULTS_zh.md) |
+| The analysis, step by step | `notebooks/00–05` |
+| Reusable estimator code | `src/` |
 
 ```bash
 git clone https://github.com/Hanklin999/LockerCollectDesign
 cd LockerCollectDesign
 pip install -r requirements.txt
-
-python src/data_generation.py        # generate simulated data
+python src/data_generation.py
 python -m jupytext --to notebook notebooks/*.py
-jupyter notebook notebooks/          # run 01 → 00 → 02 → 03 → 04 → 05
+jupyter notebook notebooks/     # run 01 → 00 → 02 → 03 → 04 → 05
 ```
 
 ---
 
 ## Limitations
 
-- Single pre-treatment week limits formal pre-trend testing (mitigated by confirming baseline balance and an immediate, stable post-treatment effect)
-- Simulated data — no novel real-world discovery; the goal is to demonstrate the analytical pipeline with operationally realistic parameters
-- Small per-arm sample (n=100) leaves residual covariate imbalance after randomization, addressed via PSM
-- Excluded one experiment week (Chinese New Year) for a valid seasonal confound; leave-one-out testing confirms this doesn't drive the result
-- Extra notification touches increase complaint and opt-out rates by < 0.001 percentage points — operationally negligible but worth monitoring at scale
+- One pre-treatment week limits formal pre-trend testing — mitigated by baseline balance checks and the immediate, stable post-treatment effect
+- Simulated data: the goal is demonstrating decision-grade experiment analysis, not a novel empirical discovery
+- n=100/arm leaves residual imbalance after randomization — the explicit motivation for the PSM cross-check
+- Guardrail metrics rise by < 0.001pp with more touches — operationally negligible, but set monitoring thresholds before scaling
 
 ---
 
 ## About
 
-**Methods**: Difference-in-Differences · Propensity Score Matching · T/S/X-Learner · Causal Forest DML · Rosenbaum Bounds
+**Methods**: DiD (two-way FE) · PSM · T/S/X-Learner · Causal Forest DML · Rosenbaum bounds
 **Tools**: Python · statsmodels · scikit-learn · matplotlib
-**Background**: HarvardX Causal Inference (verified); 2.5 years designing and analyzing nationwide A/B experiments in e-commerce logistics
+**Background**: HarvardX Causal Inference (verified) · 2.5 years designing nationwide A/B experiments in e-commerce logistics
 
-Built as a portfolio project for Product Analytics / Experimentation Scientist roles.
+Built as a portfolio project for Product Data Scientist / Experimentation roles.
 
 *Questions or feedback? Open an issue or reach out via [LinkedIn](https://linkedin.com/in/hank-lin-ch17).*
