@@ -173,6 +173,32 @@ A cadence only "wins" if it moves the North Star without breaching guardrails. 3
 
 ---
 
+## Scaling Considerations: What Store-Level Randomization Buys — and What Could Still Bite
+
+### Why cluster randomization (and what it costs)
+
+Randomizing at the **store level** rather than buyer level was deliberate: notification policy is configured per locker location, and buyers at the same store share the physical queue — buyer-level randomization would put treated and control buyers in the same locker, contaminating both arms.
+
+The cost: outcomes within a store are correlated (shared location, shared buyer pool), so the effective sample size is closer to **300 stores than 2.4M parcels**. All standard errors in this analysis are therefore **clustered at the store level** — the honest, conservative choice. This is also why per-arm n=100 leaves residual covariate imbalance (see PSM section).
+
+### Interference channels this design does NOT close
+
+| Channel | Mechanism | Direction of bias |
+|---|---|---|
+| **Multi-store buyers** | A buyer trained by 3-touch reminders at Store A carries the habit to control Store B | Dilutes the measured effect (conservative) |
+| **Capacity spillover** | When a burst store closes ordering, volume reroutes to nearby stores; treated stores clearing faster absorb more overflow | Contaminates nearby controls; sign ambiguous |
+
+**How I would test for spillover before full rollout**: compare control stores by distance to the nearest treated store. If near-controls behave differently from far-controls, SUTVA is violated and the next iteration should randomize at the **district level** instead.
+
+### Rollout monitoring plan
+
+1. **Long-term holdout**: keep ~5% of burst stores on 2-touch permanently — the only way to measure effect durability and detect drift
+2. **Novelty check**: the event study already shows the effect is stable from week 1 through week 4 (no spike-then-fade) — re-verify at 12 weeks
+3. **Guardrail alerts**: complaint and opt-out rates rose < 0.001pp in the pilot; set automated thresholds (e.g., 2x pilot level) before scaling
+4. **Sequential monitoring**: staged rollout by wave (non-metro high-capacity first) with a pre-registered stopping rule if guardrails breach
+
+---
+
 ## Experiment Design (Reference)
 
 **Randomization unit**: store — notification policy is configured per locker location; store-level assignment prevents cross-contamination between buyers at one site.
