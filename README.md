@@ -24,7 +24,7 @@ Question: can push notifications fix this — and how many should we send?
 
 **The decision on the table**: keep 2 notification touches per parcel, upgrade to 3, or go all-in with 5?
 
-**The answer** (skip ahead if you only have 30 seconds):
+**The answer**:
 
 > **Ship 3 touches, network-wide.** It cuts collection time by **~1.5 hours per parcel** and RTS returns by **~2,880 parcels/day**. Touches 4 and 5 add almost nothing but cost and opt-out risk. If rollout must be staged, start with **non-metro, high-capacity stores** — the effect there is 40% larger.
 
@@ -261,4 +261,4 @@ jupyter notebook notebooks/     # run 01 → 00 → 02 → 03 → 04 → 05
 
 Built as a portfolio project for Product Data Scientist / Experimentation roles.
 
-*Questions or feedback? Open an issue or reach out via [LinkedIn](https://linkedin.com/in/hank-lin-ch17).*
+*Questions or feedback? Open an issue or reach out via [](https://.com/in/hank-lin-ch17).*
